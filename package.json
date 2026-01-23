@@ -2,10 +2,11 @@
   "name": "marketplace-v2",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "prebuild": "node scripts/prebuild.js",
-    "build": "yarn prebuild && next build",
-    "start": "next start"
+  "dev": "next dev",
+  "build": "next build",
+  "start": "next start"
+}
+
   },
   "dependencies": {
     "@datadog/browser-rum": "^6.25.3",
