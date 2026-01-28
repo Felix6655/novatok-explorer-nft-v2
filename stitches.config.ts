@@ -20,7 +20,7 @@ import {
 } from '@radix-ui/colors'
 import { createStitches } from '@stitches/react'
 import type * as Stitches from '@stitches/react'
-import { reset } from 'utils/css/reset'
+import { reset } from "./utils/css/reset";
 import { Inter } from "next/font/google"
 
 const inter = Inter({

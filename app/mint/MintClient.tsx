@@ -10,7 +10,7 @@ declare global {
   }
 }
 
-export default function MintPage() {
+export default function MintClient() {
   const sp = useSearchParams();
   const tokenUriFromQS = sp.get("tokenUri") || "";
   const previewFromQS = sp.get("preview") || "";
@@ -28,8 +28,8 @@ export default function MintPage() {
   const [minting, setMinting] = useState(false);
   const [mintError, setMintError] = useState<string>("");
   const [txHash, setTxHash] = useState<string>("");
-    const [tokenId, setTokenId] = useState<string>("");
-    const [mintState, setMintState] = useState<'idle'|'preparing'|'wallet'|'pending'|'success'|'error'>('idle');
+  const [tokenId, setTokenId] = useState<string>("");
+  const [mintState, setMintState] = useState<'idle'|'preparing'|'wallet'|'pending'|'success'|'error'>('idle');
 
   const EXPECTED_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || "11155111");
 
@@ -60,11 +60,11 @@ export default function MintPage() {
     const f = e.target.files?.[0];
     if (!f) return;
 
-      setUploadError(""); 
-      setUploading(true); 
-      setImageUrl(""); 
-      setImageGatewayUrl(""); 
-      setMetadataIpfsUri(""); 
+    setUploadError(""); 
+    setUploading(true); 
+    setImageUrl(""); 
+    setImageGatewayUrl(""); 
+    setMetadataIpfsUri(""); 
 
     try {
       // 1. Upload image to IPFS
@@ -148,36 +148,39 @@ export default function MintPage() {
   async function mintNft() {
     setMintError("");
     setTxHash("");
+    setTokenId("");
+    setMintState('preparing');
 
     if (!metadataIpfsUri) {
       setMintError("Upload an image and metadata first.");
+      setMintState('error');
       return;
     }
     if (!CONTRACT_ADDRESS) {
-      setMintError(
-        "Missing contract address env var. Set NEXT_PUBLIC_CONTRACT_ADDRESS (or NEXT_PUBLIC_NFT_CONTRACT_ADDRESS) in Vercel."
-      );
+      setMintError("Missing contract address env var. Set NEXT_PUBLIC_CONTRACT_ADDRESS (or NEXT_PUBLIC_NFT_CONTRACT_ADDRESS) in Vercel.");
+      setMintState('error');
       return;
     }
     if (!hasMetaMask) {
       setMintError("MetaMask not detected.");
+      setMintState('error');
       return;
     }
     if (!walletAddress) {
       setMintError("Connect your wallet first.");
+      setMintState('error');
       return;
     }
     if (chainId !== null && chainId !== EXPECTED_CHAIN_ID) {
       setMintError(`Wrong network. Switch to Sepolia (${EXPECTED_CHAIN_ID}).`);
+      setMintState('error');
       return;
     }
 
-    setMinting(true);
-
+    setMintState('wallet');
     try {
       const provider = new ethers.BrowserProvider(window.ethereum);
       const signer = await provider.getSigner();
-
       const contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
 
       // Try calling common mint variants with metadataIpfsUri only
@@ -197,29 +200,39 @@ export default function MintPage() {
       }
 
       setTxHash(tx.hash);
+      setMintState('pending');
 
       const receipt = await tx.wait();
       if (!receipt) {
         setMintError("Transaction sent but no receipt returned.");
+        setMintState('error');
         return;
       }
-    } catch (e: any) {
-      const msg =
-        e?.shortMessage || e?.reason || e?.message || "Mint failed (unknown error)";
 
-      if (String(msg).toLowerCase().includes("is not a function")) {
-        setMintError(
-          msg +
-            " — Your contract mint function name/signature is different. Tell me the contract mint function name and I’ll adjust this file."
-        );
-      } else {
-        setMintError(msg);
+      // Parse tokenId from Transfer event logs
+      let foundTokenId = "";
+      if (receipt.logs && Array.isArray(receipt.logs)) {
+        for (const log of receipt.logs) {
+          // ERC721 Transfer event: topic[0] = keccak256("Transfer(address,address,uint256)")
+          if (
+            log.topics &&
+            log.topics[0] ===
+              "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef" &&
+            log.topics[2]?.toLowerCase().endsWith(walletAddress.slice(2).toLowerCase())
+          ) {
+            // tokenId is in topics[3] (uint256, hex)
+            foundTokenId = parseInt(log.topics[3], 16).toString();
+            break;
+          }
+        }
       }
-    } finally {
-      setMinting(false);
+      setTokenId(foundTokenId);
+      setMintState('success');
+    } catch (e: any) {
+      const msg = e?.shortMessage || e?.reason || e?.message || "Mint failed (unknown error)";
+      setMintError(msg);
+      setMintState('error');
     }
-      setTokenId("");
-      setMintState('preparing');
   }
 
   useEffect(() => {
@@ -247,9 +260,7 @@ export default function MintPage() {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-zinc-50 dark:bg-black px-4">
-      <h1 className="text-3xl font-bold mb-6 text-black dark:text-zinc-50">
-        Mint NFT
-      </h1>
+      <h1 className="text-3xl font-bold mb-6 text-black dark:text-zinc-50">Mint NFT</h1>
 
       {/* Upload card */}
       <div
@@ -285,10 +296,7 @@ export default function MintPage() {
           <div className="text-sm text-zinc-700 dark:text-zinc-200">
             {walletAddress ? (
               <>
-                Connected:{" "}
-                <span className="font-mono">
-                  {walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}
-                </span>
+                Connected: <span className="font-mono">{walletAddress.slice(0, 6)}…{walletAddress.slice(-4)}</span>
               </>
             ) : (
               "Wallet not connected"
@@ -296,19 +304,9 @@ export default function MintPage() {
           </div>
 
           {!walletAddress ? (
-            <button
-              onClick={connectWallet}
-              className="px-3 py-2 rounded-md bg-black text-white dark:bg-zinc-50 dark:text-black"
-            >
-              Connect Wallet
-            </button>
+            <button onClick={connectWallet} className="px-3 py-2 rounded-md bg-black text-white dark:bg-zinc-50 dark:text-black">Connect Wallet</button>
           ) : wrongNetwork ? (
-            <button
-              onClick={switchToSepolia}
-              className="px-3 py-2 rounded-md bg-amber-600 text-white"
-            >
-              Switch to Sepolia
-            </button>
+            <button onClick={switchToSepolia} className="px-3 py-2 rounded-md bg-amber-600 text-white">Switch to Sepolia</button>
           ) : (
             <span className="text-xs text-zinc-500">Chain: {chainId ?? "?"}</span>
           )}
@@ -326,15 +324,7 @@ export default function MintPage() {
 
         {txHash && (
           <div className="mt-3 text-sm text-zinc-700 dark:text-zinc-200">
-            Tx:{" "}
-            <a
-              className="underline"
-              href={`https://sepolia.etherscan.io/tx/${txHash}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {txHash.slice(0, 10)}…{txHash.slice(-8)}
-            </a>
+            Tx: <a className="underline" href={`https://sepolia.etherscan.io/tx/${txHash}`} target="_blank" rel="noreferrer">{txHash.slice(0, 10)}…{txHash.slice(-8)}</a>
           </div>
         )}
 
@@ -346,14 +336,7 @@ export default function MintPage() {
         <div className="mt-4 text-xs text-zinc-500 space-y-1">
           <div>Expected chain: {EXPECTED_CHAIN_ID}</div>
           <div>
-            Contract:{" "}
-            {CONTRACT_ADDRESS ? (
-              <span className="font-mono">
-                {CONTRACT_ADDRESS.slice(0, 6)}…{CONTRACT_ADDRESS.slice(-4)}
-              </span>
-            ) : (
-              <span className="text-red-400">missing</span>
-            )}
+            Contract: {CONTRACT_ADDRESS ? <span className="font-mono">{CONTRACT_ADDRESS.slice(0, 6)}…{CONTRACT_ADDRESS.slice(-4)}</span> : <span className="text-red-400">missing</span>}
           </div>
         </div>
       </div>
