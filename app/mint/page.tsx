@@ -38,6 +38,11 @@ export default function MintPage() {
     process.env.NEXT_PUBLIC_NFT_CONTRACT_ADDRESS ||
     "";
 
+  // Mint flow helpers for on-chain base64 tokenURI or IPFS fallback
+  const hasTokenUriFromQS = !!tokenUriFromQS;
+  const hasOnChainTokenUri = tokenUriFromQS.startsWith("data:application/json;base64,");
+  const tokenUriToMint = tokenUriFromQS || metadataIpfsUri;
+
   const hasMetaMask = typeof window !== "undefined" && !!window.ethereum;
 
   // Minimal ABI that covers the most common ERC-721 mint patterns
@@ -149,8 +154,8 @@ export default function MintPage() {
     setMintError("");
     setTxHash("");
 
-    if (!metadataIpfsUri) {
-      setMintError("Upload an image and metadata first.");
+    if (!tokenUriToMint) {
+      setMintError("Provide tokenUri via link (Create Hub) or upload an image to generate one.");
       return;
     }
     if (!CONTRACT_ADDRESS) {
